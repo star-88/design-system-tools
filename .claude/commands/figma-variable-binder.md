@@ -1,6 +1,6 @@
 # Figma Variable Binder
 
-自動化完成三件事：將 Figma Variables Collection 的 token 綁定到指定主元件、透過 PrimeNG Aura 主題來源補全未綁定的顏色變數、並以繁體中文為每個變數撰寫簡潔說明。
+自動化完成四件事：將 Figma Variables Collection 的 token 綁定到指定主元件、透過 PrimeNG Aura 主題來源補全未綁定的顏色變數、以繁體中文為每個變數撰寫簡潔說明，並將元件的間距／圓角／邊框數值綁定到 primitive 變數。
 
 ---
 
@@ -73,9 +73,70 @@
 
 ---
 
+### Step 4：將 Spacing／Radius／BorderWidth 綁定到 Primitive 變數
+
+#### 4-1. 讀取各 variant 的數值
+
+1. 取得 COMPONENT_SET 下所有 variant 節點。
+2. 對每個 variant，遞迴讀取所有子節點，蒐集以下 FLOAT 屬性的**實際數值**：
+
+| Figma 屬性 | 對應 primitive 類別 |
+|-----------|-------------------|
+| `paddingTop` / `paddingBottom` / `paddingLeft` / `paddingRight` | `spacing` |
+| `itemSpacing` | `spacing` |
+| `cornerRadius` | `borderRadius` |
+| `strokeWeight` | `borderWidth` |
+
+3. 彙整所有出現過的不重複數值，對照 primitive collection 的對照表（見下方）。
+
+#### 4-2. 值 → Primitive 變數對照表
+
+執行前先從 primitive collection 讀取實際變數清單與數值，建立動態對照表。以下為常見預設值：
+
+| 數值 | spacing | borderRadius | borderWidth |
+|------|---------|--------------|-------------|
+| 1px  | —       | —            | `borderWidth/1` |
+| 2px  | —       | —            | `borderWidth/2` |
+| 4px  | `spacing/1` | `borderRadius/xs` | — |
+| 6px  | —       | `borderRadius/sm` | — |
+| 8px  | `spacing/2` | `borderRadius/md` | — |
+| 12px | `spacing/3` | `borderRadius/lg` | — |
+| 16px | `spacing/4` | `borderRadius/xl` | — |
+| 24px | `spacing/5` | `borderRadius/2xl` | — |
+
+> 以上僅為參考，**實際對照表以 primitive collection 內容為準**，每次執行前須重新讀取。
+
+#### 4-3. 執行綁定
+
+- 對每個符合對照表的屬性，使用 `setBoundVariable` 將 primitive 變數綁定到該節點屬性。
+- **取代現有綁定**：若節點屬性已綁定其他變數（例如外部函式庫變數），一律改綁為本地 primitive 變數。
+- variant 數量多時，分批執行（每批不超過 90 個 variant），避免 MCP 連線逾時。
+
+#### 4-4. 無對應值的處理
+
+若某個數值在對照表中找不到對應的 primitive 變數：
+
+1. **不自動建立新的 primitive 變數**。
+2. 將該數值列入回報清單，格式如下：
+
+```
+無對應 primitive 的數值：
+- padding: 20px（出現在 5 個 variant）
+- cornerRadius: 3px（出現在 2 個 variant）
+```
+
+3. **暫停並詢問使用者**：要新增對應的 primitive 變數，還是保留不綁定？
+
+#### 4-5. 例外：數值為 0 的屬性
+
+- `itemSpacing = 0`、`padding = 0` 等數值為 0 的屬性，**預設保留不綁定**（0 是 Figma 預設值，不需要 token 管理）。
+- 若使用者明確要求綁定，再執行。
+
+---
+
 ## 任務結束後：回報摘要
 
-完成三個步驟後，向使用者報告：
+完成四個步驟後，向使用者報告：
 
 **1. 是否新增了新變數**
 明確說明這次任務是否在該元件的 Variables Collection 中**新建**了任何變數（與「綁定既有變數」不同）。
